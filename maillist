@@ -1,0 +1,148 @@
+#! /bin/bash
+# @author  Richard Szeto
+# @course  CS 260a
+# @time    Tuesdays 6:10PM-10PM
+# @loginID rszeto
+
+#####################################################################################
+# NAME                                                                              #
+#       maillist - create list of ccsf emails from users in classes by using CRN    #
+#                                                                                   #
+# SYNOPSIS                                                                          #
+#       maillist [-q] CRN                                                           #
+#                                                                                   #
+# ASSUMPTION                                                                        #
+#       maillist is ran on a unix machine in hills.ccsf.edu                         #
+#                                                                                   #
+# DESCRIPTION                                                                       #
+#       maillist finds users in hills.ccsf.edu unix server with the corresponding   #
+#       CRN, and creates a list of ccsf emails based on the user's names and their  #
+#       status as a student or a faculty member.                                    #
+#                                                                                   #
+#       The list is created with the same name as the CRN and is created in the     #
+#       current working directory. The normal output is in the following            #
+#       sequence: number of students with the CRN this semester, the number of      #
+#       faculty with the same CRN, the group name of the corresponding CRN, the     #
+#       group ID of the group name, the contents of the list, and the absolute      #
+#       path of the location of the list.                                           #
+#                                                                                   #
+# OPTIONS                                                                           #
+#       The -q option determines if maillist will print to standard output. If      #
+#       -q is not specified as an option, all errors and normal output will be      #
+#       displayed in standard output. If -q is specified as an option, any errors   #
+#       or normal output to standard output will not be displayed.                  #
+#                                                                                   #
+#       -q                                                                          #
+#           Quiet; do not write anything to standard output. Error determination    #
+#           will be limited by the exit code.                                       #
+#                                                                                   #
+#####################################################################################
+
+# Setup default values
+quietopt=FALSE
+faculty=0
+student=0
+
+# process command options
+if [ "$1" = -q ]
+then
+    quietopt=TRUE
+    shift 1
+fi
+
+# process command arguments
+if [ $# -eq 1 ]
+then
+    CRN="$1"
+else
+    if [ "$quietopt" = FALSE ]
+    then
+        echo "Invalid argument" >&2
+        echo "Usage: maillist [-q] CRN" >&2
+    fi
+    exit 1
+fi
+
+groupname="c$CRN"
+
+# check if /etc/group is readable before proceeding
+if [ ! -r /etc/group ]
+then
+    if [ "$quietopt" = FALSE ]
+    then
+        echo "Cannot read /etc/group: Permission Denied" >&2
+    fi
+    exit 2
+fi
+
+groupid="$(grep "^$groupname:" /etc/group | cut -d: -f3)"
+
+# get the list of users in group and separate them by newline
+list="$(grep "^$groupname:" /etc/group | cut -d: -f4 | sed 's/,/\n/g')"
+
+# check if CRN is valid
+if [ -z "$list" ]
+then
+    if [ "$quietopt" = FALSE ]
+    then
+        echo "CRN:$CRN not found" >&2
+        echo "Usage: maillist [-q] CRN" >&2
+    fi
+    exit 3
+fi
+
+# remove previous email list
+if [ -f "$CRN" ]
+then
+    # check if previous email list is writable
+    if [ ! -w ./ ]
+    then
+        if [ "$quietopt" = FALSE ]
+        then
+            echo "file $CRN is not writable: Directory Permission Denied" >&2
+        fi
+        exit 4
+    fi
+    rm "$CRN"
+fi
+
+# check if current directory is writable before creating new email list
+if [ ! -w ./ ]
+then
+    if [ "$quietopt" = FALSE ]
+    then
+        echo "file $CRN is not writable: Directory Permission Denied" >&2
+    fi
+    exit 6
+fi
+touch "$CRN"
+
+# count students and faculty, and append corresponding emails
+for person in $list
+do
+    if [ -d "/students/$person" ]
+    then
+        student="$((student + 1))"
+        echo "$person@mail.ccsf.edu" >> "$CRN"
+    else
+        faculty="$((faculty + 1))"
+        echo "$person@ccsf.edu" >> "$CRN"
+    fi
+done
+
+# sort list of emails
+sort "$CRN" -o "$CRN"
+
+# print out data
+if [ "$quietopt" = FALSE ]
+then
+    echo "Number of students: $student"
+    echo "Number of faculty: $faculty"
+    echo "Group name: $groupname"
+    echo "Group id: $groupid"
+    cat "$CRN"
+    currentdir="$(pwd)"
+    echo "Absolute path for mail list: $currentdir/$CRN"
+fi
+
+exit 0
